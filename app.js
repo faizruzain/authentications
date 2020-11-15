@@ -102,7 +102,7 @@ app.post('/login', (req, res) => {
           res.send('Incorrect email/password');
         }
       } else if (!doc) {
-        res.send('We dont know you');
+        res.render('notfound');
       } else {
         console.log(err);
       }
