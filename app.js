@@ -15,7 +15,7 @@ app.set('view engine', 'ejs');
 //tell our app to use body-parser
 app.use(bodyParser.urlencoded({extended: true}));
 
-// ########################## MongoDB ##########################
+// ########################################## MongoDB ##########################################
 // getting-started.js
 const mongoose = require('mongoose');
 
@@ -32,7 +32,7 @@ db.once('open', function() {
   console.log('Connected to the server');
 });
 
-// encryption
+// ############## encryption ##############
 const encrypt = require('mongoose-encryption');
 
 //schema
@@ -42,16 +42,15 @@ const usersSchema = new mongoose.Schema({
 
 });
 
-// middleware for hashing passwords
-var encKey = process.env.SOME_32BYTE_BASE64_STRING;
-var sigKey = process.env.SOME_64BYTE_BASE64_STRING;
+var secret = '$=DMY9+PfzlG3N3vN*!4L(FH^Q3MOJ2a';
 
-usersSchema.plugin(encrypt, { encryptionKey: encKey, signingKey: sigKey });
+usersSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] } );
+// ############## encryption ##############
 
 //model
 const User = mongoose.model('User', usersSchema);
 
-// ########################## MongoDB ##########################
+// ########################################## MongoDB ##########################################
 
 app.get('/', (req, res) => {
   res.render('home');
@@ -93,16 +92,17 @@ app.post('/login', (req, res) => {
 
   User.findOne(
     {
-      email: email,
-      password: password
+      email: email
     },
     (err, doc) => {
       if (doc) {
-        console.log('Exist!');
-        res.render('secrets');
+        if (doc.password === password) {
+          res.render('secrets');
+        } else {
+          res.send('Incorrect email/password');
+        }
       } else if (!doc) {
-        console.log("Doesn't exist");
-        res.send("<h1>We don't know who you are</h1>");
+        res.send('We dont know you');
       } else {
         console.log(err);
       }
