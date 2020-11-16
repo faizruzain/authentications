@@ -141,4 +141,6 @@ $RECYCLE.BIN/
 
 .DS_Store
 
+.env
+
 # End of https://www.toptal.com/developers/gitignore/api/node,windows
