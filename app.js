@@ -1,7 +1,13 @@
+// environment variables
+require('dotenv').config()
+
 const express = require('express');
 const app = express();
 const port = 3000;
 const bodyParser = require('body-parser');
+
+// hashing your message
+var md5 = require('md5');
 
 //tell our app to use EJS
 app.set('view engine', 'ejs');
@@ -33,7 +39,7 @@ db.once('open', function() {
 });
 
 // ############## encryption ##############
-const encrypt = require('mongoose-encryption');
+// const encrypt = require('mongoose-encryption');
 
 //schema
 const usersSchema = new mongoose.Schema({
@@ -42,9 +48,9 @@ const usersSchema = new mongoose.Schema({
 
 });
 
-var secret = '$=DMY9+PfzlG3N3vN*!4L(FH^Q3MOJ2a';
+var secret = process.env.MY_SECRET;
 
-usersSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] } );
+// usersSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] } );
 // ############## encryption ##############
 
 //model
@@ -67,7 +73,7 @@ app.get('/register', (req, res) => {
 app.post('/register', (req, res) => {
 
   const email = req.body.email;
-  const password = req.body.password;
+  const password = md5(req.body.password);
 
   const newUser = new User ({
     email: email,
@@ -88,7 +94,7 @@ app.post('/register', (req, res) => {
 app.post('/login', (req, res) => {
 
   const email = req.body.email;
-  const password = req.body.password;
+  const password = md5(req.body.password);
 
   User.findOne(
     {
@@ -110,14 +116,6 @@ app.post('/login', (req, res) => {
   );
 
 });
-
-
-
-
-
-
-
-
 
 
 
