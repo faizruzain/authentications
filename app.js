@@ -1,13 +1,26 @@
 // environment variables
 require('dotenv').config()
 
+const mongoose = require('mongoose');
 const express = require('express');
 const app = express();
 const port = 3000;
 const bodyParser = require('body-parser');
+const session = require('express-session');
+const passport = require('passport');
+const passportLocalMongoose = require('passport-local-mongoose');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook');
+const findOrCreate = require('mongoose-findorcreate');
 
+// encryption level 3
 // hashing your message
-var md5 = require('md5');
+// const md5 = require('md5');
+
+// encryption level 4
+// hashing + salting
+// const bcrypt = require('bcrypt');
+// const saltRounds = 10;
 
 //tell our app to use EJS
 app.set('view engine', 'ejs');
@@ -21,15 +34,28 @@ app.set('view engine', 'ejs');
 //tell our app to use body-parser
 app.use(bodyParser.urlencoded({extended: true}));
 
+// encryption level 5
+// session
+app.use(session({
+  secret: 'keyboard cat',
+  resave: false,
+  saveUninitialized: false
+}));
+
+// use passport to make cookie
+app.use(passport.initialize());
+app.use(passport.session());
+
 // ########################################## MongoDB ##########################################
 // getting-started.js
-const mongoose = require('mongoose');
+
 
 // connect to DB
 mongoose.connect('mongodb://localhost/usersDB', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
+mongoose.set('useCreateIndex', true);
 
 //a connection to database
 const db = mongoose.connection;
@@ -43,20 +69,103 @@ db.once('open', function() {
 
 //schema
 const usersSchema = new mongoose.Schema({
-  email: String,
-  password: String
+  username: String,
+  password: String,
+  googleId: String,
+  facebookId: String
 
 });
 
-var secret = process.env.MY_SECRET;
+// var secret = process.env.MY_SECRET;
 
 // usersSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] } );
 // ############## encryption ##############
+
+// encryption level 5
+// session
+usersSchema.plugin(passportLocalMongoose);
+usersSchema.plugin(findOrCreate);
 
 //model
 const User = mongoose.model('User', usersSchema);
 
 // ########################################## MongoDB ##########################################
+
+// session
+passport.use(User.createStrategy());
+
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+// GOOGLE STRATEGY
+passport.use(new GoogleStrategy(
+  {
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    // console.log(profile._json);
+
+    User.findOne({ googleId: profile.id }, (err, user) => {
+      if (!user) {
+        const user = new User ({
+          username: profile.displayName,
+          password: String,
+          googleId: profile.id
+        });
+        user.save((err) => {
+          if (!err) {
+            return cb(err, user);
+          }
+        });
+      } else {
+        return cb(err, user);
+      }
+    });
+
+    // User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    //   return cb(err, user);
+    // });
+  }
+));
+
+// FACEBOOK STRATEGY
+passport.use(new FacebookStrategy({
+    clientID: process.env.FB_APP_ID,
+    clientSecret: process.env.FB_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/callback"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+
+    User.findOne({ facebookId: profile.id }, (err, user) => {
+      if (!user) {
+        const user = new User ({
+          username: profile.displayName,
+          facebookId: profile.id
+        });
+        user.save((err) => {
+          if (!err) {
+            return cb(err, user);
+          }
+        });
+      } else {
+        return cb(err, user);
+      }
+    });
+
+    // User.findOrCreate({ facebookId: profile.id }, function (err, user) {
+    //   return cb(err, user);
+    // });
+  }
+));
 
 app.get('/', (req, res) => {
   res.render('home');
@@ -70,56 +179,78 @@ app.get('/register', (req, res) => {
   res.render('register');
 });
 
+app.get('/logout', (req, res) => {
+  req.logout();
+  res.redirect('/');
+});
+
+app.get('/secrets', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render('secrets');
+  } else {
+    res.redirect('/login');
+  }
+
+});
+
+// google
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile'] }));
+
+app.get('/auth/google/secrets',
+passport.authenticate('google', { failureRedirect: '/login' }),
+function(req, res) {
+// Successful authentication, redirect home.
+  res.redirect('/secrets');
+});
+
+// facebook
+app.get('/auth/facebook', passport.authenticate('facebook'));
+
+app.get('/auth/facebook/callback',
+passport.authenticate('facebook', { failureRedirect: '/login' }),
+function(req, res) {
+  // Successful authentication, redirect home.
+  res.redirect('/secrets');
+});
+
 app.post('/register', (req, res) => {
 
-  const email = req.body.email;
-  const password = md5(req.body.password);
-
-  const newUser = new User ({
-    email: email,
-    password: password
-  });
-
-  newUser.save((err) => {
-    if (!err) {
-      console.log('Saved!');
-      res.render('secrets');
+  User.register({username: req.body.username}, req.body.password, (err, user) => {
+    if(err) {
+      console.log(err);
     } else {
-      res.send(err);
+      passport.authenticate("local")(req, res, () => {
+        res.redirect('/secrets');
+      });
     }
+
   });
 
 });
 
 app.post('/login', (req, res) => {
 
-  const email = req.body.email;
-  const password = md5(req.body.password);
+  const user = new User ({
+    username: req.body.username,
+    password: req.body.password
+  });
 
-  User.findOne(
-    {
-      email: email
-    },
-    (err, doc) => {
-      if (doc) {
-        if (doc.password === password) {
-          res.render('secrets');
-        } else {
-          res.send('Incorrect email/password');
+  req.login(user, (err, user) => {
+    if (err) {
+      console.log(err);
+    } else {
+      passport.authenticate('local', (err, user, info) => {
+        if (user) {
+          res.redirect('/secrets');
+        } else if (!user) {
+          res.render('error');
         }
-      } else if (!doc) {
-        res.render('notfound');
-      } else {
-        console.log(err);
-      }
+      })(req, res);
     }
-  );
+
+  });
 
 });
-
-
-
-
 
 // listening port
 app.listen(process.env.PORT || port, () => {
