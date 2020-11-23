@@ -12,6 +12,7 @@ const passportLocalMongoose = require('passport-local-mongoose');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const FacebookStrategy = require('passport-facebook');
 const findOrCreate = require('mongoose-findorcreate');
+const LocalStrategy = require('passport-local').Strategy;
 
 // encryption level 3
 // hashing your message
@@ -91,9 +92,16 @@ const User = mongoose.model('User', usersSchema);
 
 // ########################################## MongoDB ##########################################
 
-// session
+// Local STRATEGY
 passport.use(User.createStrategy());
 
+// local STRATEGY
+// passport.use(new LocalStrategy(User.authenticate()));
+
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+// not local
 passport.serializeUser(function(user, done) {
   done(null, user.id);
 });
@@ -103,6 +111,7 @@ passport.deserializeUser(function(id, done) {
     done(err, user);
   });
 });
+
 
 // GOOGLE STRATEGY
 passport.use(new GoogleStrategy(
@@ -185,9 +194,11 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('/secrets', (req, res) => {
+
   if (req.isAuthenticated()) {
     res.render('secrets');
   } else {
+    console.log(req.isAuthenticated());
     res.redirect('/login');
   }
 
@@ -230,6 +241,7 @@ app.post('/register', (req, res) => {
 
 app.post('/login', (req, res) => {
 
+
   const user = new User ({
     username: req.body.username,
     password: req.body.password
@@ -243,6 +255,7 @@ app.post('/login', (req, res) => {
         if (user) {
           res.redirect('/secrets');
         } else if (!user) {
+          console.log(user);
           res.render('error');
         }
       })(req, res);
